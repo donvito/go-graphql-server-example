@@ -55,6 +55,18 @@ type reqBody struct {
 	Query string `json:"query"`
 }
 
+func main() {
+
+	graphiqlHandler, err := graphiql.NewGraphiqlHandler("/graphql")
+	if err != nil {
+		panic(err)
+	}
+
+	http.Handle("/graphql", gqlHandler())
+	http.Handle("/graphiql", graphiqlHandler)
+	http.ListenAndServe(":3000", nil)
+}
+
 func gqlHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Body == nil {
@@ -73,27 +85,30 @@ func gqlHandler() http.Handler {
 	})
 }
 
-func main() {
+func processQuery(query string) (result string) {
 
-	graphiqlHandler, err := graphiql.NewGraphiqlHandler("/graphql")
-	if err != nil {
-		panic(err)
+	jobsData := dataFromJSON()
+
+	params := graphql.Params{Schema: gqlSchema(jobsData), RequestString: query}
+	r := graphql.Do(params)
+	if len(r.Errors) > 0 {
+		fmt.Printf("failed to execute graphql operation, errors: %+v", r.Errors)
 	}
+	rJSON, _ := json.Marshal(r)
 
-	http.Handle("/graphql", gqlHandler())
-	http.Handle("/graphiql", graphiqlHandler)
-	http.ListenAndServe(":3000", nil)
+	return fmt.Sprintf("%s", rJSON)
+
 }
 
+//Open the file data.json and retrieve json data
 func dataFromJSON() []Job {
-	//Open the file data.json
+
 	jsonf, err := os.Open("data.json")
 
 	if err != nil {
 		fmt.Printf("failed to open json file, error: %v", err)
 	}
 
-	//Load the data into jsonDataFromFile - a byte array
 	jsonDataFromFile, _ := ioutil.ReadAll(jsonf)
 	defer jsonf.Close()
 
@@ -108,11 +123,8 @@ func dataFromJSON() []Job {
 	return jobsData
 }
 
-func processQuery(query string) (result string) {
-
-	jobsData := dataFromJSON()
-
-	// Define the GraphQL Schema
+// Define the GraphQL Schema
+func gqlSchema(jobsData []Job) graphql.Schema {
 	fields := graphql.Fields{
 		"jobs": &graphql.Field{
 			Type:        graphql.NewList(jobType),
@@ -129,13 +141,6 @@ func processQuery(query string) (result string) {
 		fmt.Printf("failed to create new schema, error: %v", err)
 	}
 
-	params := graphql.Params{Schema: schema, RequestString: query}
-	r := graphql.Do(params)
-	if len(r.Errors) > 0 {
-		fmt.Printf("failed to execute graphql operation, errors: %+v", r.Errors)
-	}
-	rJSON, _ := json.Marshal(r)
-
-	return fmt.Sprintf("%s", rJSON)
+	return schema
 
 }
