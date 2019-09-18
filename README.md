@@ -8,7 +8,7 @@ cd cd src/cmd/server/
 go run main.go
 ```
 
-## Acess graphiQL after running the example
+## Access GraphiQL after running the example
 
 http://localhost:3000/graphiql
 
