@@ -133,6 +133,26 @@ func gqlSchema(jobsData []Job) graphql.Schema {
 				return jobsData, nil
 			},
 		},
+		"job": &graphql.Field{
+			Type:        jobType,
+			Description: "Get Jobs by ID",
+			Args: graphql.FieldConfigArgument{
+				"id": &graphql.ArgumentConfig{
+					Type: graphql.Int,
+				},
+			},
+			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+				id, success := params.Args["id"].(int)
+				if success {
+					for _, job := range jobsData {
+						if int(job.ID) == id {
+							return job, nil
+						}
+					}
+				}
+				return nil, nil
+			},
+		},
 	}
 	rootQuery := graphql.ObjectConfig{Name: "RootQuery", Fields: fields}
 	schemaConfig := graphql.SchemaConfig{Query: graphql.NewObject(rootQuery)}
