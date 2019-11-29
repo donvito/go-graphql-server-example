@@ -87,9 +87,9 @@ func gqlHandler() http.Handler {
 
 func processQuery(query string) (result string) {
 
-	jobsData := dataFromJSON()
+	retrieveJobs := retrieveJobsFromFile()
 
-	params := graphql.Params{Schema: gqlSchema(jobsData), RequestString: query}
+	params := graphql.Params{Schema: gqlSchema(retrieveJobs), RequestString: query}
 	r := graphql.Do(params)
 	if len(r.Errors) > 0 {
 		fmt.Printf("failed to execute graphql operation, errors: %+v", r.Errors)
@@ -101,36 +101,37 @@ func processQuery(query string) (result string) {
 }
 
 //Open the file data.json and retrieve json data
-func dataFromJSON() []Job {
+func retrieveJobsFromFile() func() []Job {
+	return func() []Job {
+		jsonf, err := os.Open("data.json")
 
-	jsonf, err := os.Open("data.json")
+		if err != nil {
+			fmt.Printf("failed to open json file, error: %v", err)
+		}
 
-	if err != nil {
-		fmt.Printf("failed to open json file, error: %v", err)
+		jsonDataFromFile, _ := ioutil.ReadAll(jsonf)
+		defer jsonf.Close()
+
+		var jobsData []Job
+
+		err = json.Unmarshal(jsonDataFromFile, &jobsData)
+
+		if err != nil {
+			fmt.Printf("failed to parse json, error: %v", err)
+		}
+
+		return jobsData
 	}
-
-	jsonDataFromFile, _ := ioutil.ReadAll(jsonf)
-	defer jsonf.Close()
-
-	var jobsData []Job
-
-	err = json.Unmarshal(jsonDataFromFile, &jobsData)
-
-	if err != nil {
-		fmt.Printf("failed to parse json, error: %v", err)
-	}
-
-	return jobsData
 }
 
 // Define the GraphQL Schema
-func gqlSchema(jobsData []Job) graphql.Schema {
+func gqlSchema(queryJobs func() []Job) graphql.Schema {
 	fields := graphql.Fields{
 		"jobs": &graphql.Field{
 			Type:        graphql.NewList(jobType),
 			Description: "All Jobs",
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-				return jobsData, nil
+				return queryJobs(), nil
 			},
 		},
 		"job": &graphql.Field{
@@ -144,7 +145,7 @@ func gqlSchema(jobsData []Job) graphql.Schema {
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 				id, success := params.Args["id"].(int)
 				if success {
-					for _, job := range jobsData {
+					for _, job := range queryJobs() {
 						if int(job.ID) == id {
 							return job, nil
 						}
