@@ -43,16 +43,14 @@ Since we wanted our server to accept requests using http, we have created a serv
 
 ```
 func main() {
+	graphiqlHandler, err := graphiql.NewGraphiqlHandler("/graphql")
+	if err != nil {
+		panic(err)
+	}
 
-  graphiqlHandler, err := graphiql.NewGraphiqlHandler("/graphql")
-  if err != nil {
-    panic(err)
-  }
-
-  http.Handle("/graphql", gqlHandler())
-  http.Handle("/graphiql", graphiqlHandler)
-  http.ListenAndServe(":3000", nil)
-
+	http.Handle("/graphql", gqlHandler())
+	http.Handle("/graphiql", graphiqlHandler)
+	http.ListenAndServe(":3000", nil)
 }
 ```
 
@@ -64,21 +62,21 @@ After that, the function processQuery() is called passing in the query.
 
 ```
 func gqlHandler() http.Handler {
-  return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-    if r.Body == nil {
-      http.Error(w, "No query data", 400)
-      return
-    }
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body == nil {
+			http.Error(w, "No query data", 400)
+			return
+		}
 
-    var rBody reqBody
-    err := json.NewDecoder(r.Body).Decode(&rBody)
-    if err != nil {
-      http.Error(w, "Error parsing JSON request body", 400)
-    }
+		var rBody reqBody
+		err := json.NewDecoder(r.Body).Decode(&rBody)
+		if err != nil {
+			http.Error(w, "Error parsing JSON request body", 400)
+		}
 
-    fmt.Fprintf(w, "%s", processQuery(rBody.Query))
+		fmt.Fprintf(w, "%s", processQuery(rBody.Query))
 
-  })
+	})
 }
 ```
 
@@ -88,16 +86,16 @@ Here how our process Query() function looks like. We retrieve the data from a js
 ```
 func processQuery(query string) (result string) {
 
-  jobsData := dataFromJSON()
+	retrieveJobs := retrieveJobsFromFile()
 
-  params := graphql.Params{Schema: gqlSchema(jobsData), RequestString: query}
-  r := graphql.Do(params)
-  if len(r.Errors) > 0 {
-    fmt.Printf("failed to execute graphql operation, errors: %+v", r.Errors)
-  }
-  rJSON, _ := json.Marshal(r)
+	params := graphql.Params{Schema: gqlSchema(retrieveJobs), RequestString: query}
+	r := graphql.Do(params)
+	if len(r.Errors) > 0 {
+		fmt.Printf("failed to execute graphql operation, errors: %+v", r.Errors)
+	}
+	rJSON, _ := json.Marshal(r)
 
-  return fmt.Sprintf("%s", rJSON)
+	return fmt.Sprintf("%s", rJSON)
 
 }
 
@@ -111,44 +109,44 @@ The GraphQL magic happens in the gqlSchema(jobsData) function. In this example, 
 The Resolvers for both functions are in line 6 and 18. Resolvers are responsible for returning the data for a query.
 
 ```
-func gqlSchema(jobsData []Job) graphql.Schema {
-  fields := graphql.Fields{
-    "jobs": &graphql.Field{
-      Type: graphql.NewList(jobType),
-      Description: "All Jobs",
-      Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-        return jobsData, nil
-      },
-    },
-    "job": &graphql.Field{
-      Type: jobType,
-      Description: "Get Jobs by ID",
-      Args: graphql.FieldConfigArgument{
-        "id": &graphql.ArgumentConfig{
-          Type: graphql.Int,
-        },
-      },
-      Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-        id, success := params.Args["id"].(int)
-        if success {
-          for _, job := range jobsData {
-            if int(job.ID) == id {
-              return job, nil
-            }
-          }
-        }
-        return nil, nil
-      },
-    },
-  }
-  rootQuery := graphql.ObjectConfig{Name: "RootQuery", Fields: fields}
-  schemaConfig := graphql.SchemaConfig{Query: graphql.NewObject(rootQuery)}
-  schema, err := graphql.NewSchema(schemaConfig)
-  if err != nil {
-    fmt.Printf("failed to create new schema, error: %v", err)
-  }
+func gqlSchema(queryJobs func() []Job) graphql.Schema {
+	fields := graphql.Fields{
+		"jobs": &graphql.Field{
+			Type:        graphql.NewList(jobType),
+			Description: "All Jobs",
+			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+				return queryJobs(), nil
+			},
+		},
+		"job": &graphql.Field{
+			Type:        jobType,
+			Description: "Get Jobs by ID",
+			Args: graphql.FieldConfigArgument{
+				"id": &graphql.ArgumentConfig{
+					Type: graphql.Int,
+				},
+			},
+			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+				id, success := params.Args["id"].(int)
+				if success {
+					for _, job := range queryJobs() {
+						if int(job.ID) == id {
+							return job, nil
+						}
+					}
+				}
+				return nil, nil
+			},
+		},
+	}
+	rootQuery := graphql.ObjectConfig{Name: "RootQuery", Fields: fields}
+	schemaConfig := graphql.SchemaConfig{Query: graphql.NewObject(rootQuery)}
+	schema, err := graphql.NewSchema(schemaConfig)
+	if err != nil {
+		fmt.Printf("failed to create new schema, error: %v", err)
+	}
 
-  return schema
+	return schema
 
 }
 ```
@@ -182,8 +180,4 @@ Full source code is available in my github repo.
 Cheers! Hope this helps anyone who is starting out with Go and GraphQL!
 
 For more updates my new blog posts, you can follow me in Twitter [@donvito](https://twitter.com/donvito).  I also share code in my [GitHub](https://github.com/donvito). If you want to know more about what I do, please add me in [LinkedIn](https://www.linkedin.com/in/melvinvivas/). I recently started a new [youtube channel](https://www.youtube.com/channel/UCi6RVSV8s9Yy2Qg3WcGq9cg) - I upload some tutorials there as well. Check it out!
-
-I'm also looking for remote development or tech blogging work. Would appreciate leads. :)  
-[http://www.melvinvivas.com/looking-for-remote-software-development-work-outsource](http://www.melvinvivas.com/looking-for-remote-software-development-work-outsource/)
-
 
